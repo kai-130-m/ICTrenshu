@@ -1,0 +1,49 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ictrenshu-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app_pw}
+      POSTGRES_DB: ${POSTGRES_DB:-appdb}
+      TZ: Asia/Tokyo
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-appdb}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ./api
+    container_name: ictrenshu-api
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_USER: ${POSTGRES_USER:-app}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-app_pw}
+      DB_NAME: ${POSTGRES_DB:-appdb}
+      PYTHONUNBUFFERED: "1"
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./api/app:/app/app
+      # 機密CSVをホストの外部フォルダから読みたい場合は、以下のbindマウントを有効化してください。
+      # .env に CSV_HOST_DIR=C:\\Users\\Owner\\Documents\\ICTenshu\\data のように絶対パスを設定した上で使用します。
+      - type: bind
+        source: ${CSV_HOST_DIR}
+        target: /data/csv
+        read_only: true
+
+volumes:
+  pgdata:
